@@ -1,0 +1,15 @@
+# Python sanal ortamı (ÇOK ÖNEMLİ)
+.venv/
+venv/
+.env
+
+# Python cache dosyaları
+__pycache__/
+*.pyc
+*.pyo
+
+# Log dosyaların (ekranda trading.log gördüm)
+*.log
+
+simulation_state.json
+trading_log.txt
