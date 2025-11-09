@@ -267,28 +267,133 @@ def main_job():
     
 
 
-    # 5. Increment cycle count and rotate API key if necessary
+        # 5. Save state to file for web UI
 
 
-    cycle_count += 1
+    
 
 
-    if cycle_count % 60 == 0:
+        if config.SIMULATION_MODE and portfolio:
 
 
-        previous_key_index = current_api_key_index
+    
 
 
-        current_api_key_index = (current_api_key_index + 1) % len(config.GROQ_API_KEYS)
+            print("[STEP 5] Saving state to portfolio_state.json for web UI...")
 
 
-        print(f"\n{'!'*20}")
+    
 
 
-        print(f"ROTATING API KEY: Switched from index {previous_key_index} to {current_api_key_index}.")
+            try:
 
 
-        print(f"{'!'*20}\n")
+    
+
+
+                state_data = {
+
+
+    
+
+
+                    "portfolio_summary": portfolio.get_portfolio_summary(),
+
+
+    
+
+
+                    "open_positions": portfolio.get_all_open_positions(),
+
+
+    
+
+
+                    "equity_history": portfolio.get_equity_history()
+
+
+    
+
+
+                }
+
+
+    
+
+
+                with open('portfolio_state.json', 'w') as f:
+
+
+    
+
+
+                    json.dump(state_data, f, indent=2)
+
+
+    
+
+
+            except Exception as e:
+
+
+    
+
+
+                print(f"Error saving state to file: {e}")
+
+
+    
+
+
+    
+
+
+    
+
+
+        # 6. Increment cycle count and rotate API key if necessary
+
+
+    
+
+
+        cycle_count += 1
+
+
+    
+
+
+        if cycle_count > 0 and cycle_count % 60 == 0:
+
+
+    
+
+
+            previous_key_index = current_api_key_index
+
+
+    
+
+
+            current_api_key_index = (current_api_key_index + 1) % len(config.GROQ_API_KEYS)
+
+
+    
+
+
+            print(f"\n{'!'*20}")
+
+
+    
+
+
+            print(f"ROTATING API KEY: Switched from index {previous_key_index} to {current_api_key_index}.")
+
+
+    
+
+
+            print(f"{'!'*20}\n")
 
 
 

@@ -26,17 +26,23 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
+def get_state_from_file():
+    """Helper function to read the state file."""
+    try:
+        with open('portfolio_state.json', 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
 @app.route('/api/portfolio_summary')
 def api_portfolio_summary():
-    if portfolio:
-        return jsonify(portfolio.get_portfolio_summary())
-    return jsonify({})
+    state = get_state_from_file()
+    return jsonify(state.get("portfolio_summary", {}))
 
 @app.route('/api/open_positions')
 def api_open_positions():
-    if portfolio:
-        return jsonify(portfolio.get_all_open_positions())
-    return jsonify({})
+    state = get_state_from_file()
+    return jsonify(state.get("open_positions", {}))
 
 @app.route('/api/trade_log')
 def api_trade_log():
@@ -48,8 +54,7 @@ def api_trade_log():
 
 @app.route('/api/portfolio_history')
 def api_portfolio_history():
-    if portfolio:
-        return jsonify(portfolio.get_equity_history())
-    return jsonify([])
+    state = get_state_from_file()
+    return jsonify(state.get("equity_history", []))
 
 # --- End Flask Web Server ---
