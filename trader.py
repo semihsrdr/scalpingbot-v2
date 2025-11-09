@@ -55,13 +55,25 @@ RULES:
     *   **CRITICAL:** Your entire output must be a single, valid JSON object. Do not add any text before or after it. Ensure all keys and string values are enclosed in double quotes.
 """
 
-def get_trade_decision(market_summary: dict, position_status: tuple, portfolio_summary: dict) -> dict:
+def get_trade_decision(market_summary: dict, position_status: tuple, portfolio_summary: dict, groq_api_key: str) -> dict:
     """
-    Takes market summary, position, and portfolio status, asks the LLM, and returns the trade decision dictionary.
+    Takes market summary, position, portfolio status, and a Groq API key,
+    asks the LLM, and returns the trade decision dictionary.
     """
-    default_decision = {"command": "hold", "trade_amount_usd": 0, "reasoning": "Default action."}
-    if not llm:
-        print("LLM not available. Defaulting to 'hold'.")
+    default_decision = {"command": "hold", "trade_amount_usd": 0, "reasoning": "Default action due to error or missing key."}
+    
+    if not groq_api_key:
+        print("Groq API key not provided. Defaulting to 'hold'.")
+        return default_decision
+
+    try:
+        llm = ChatGroq(
+            model=config.LLM_MODEL_NAME,
+            groq_api_key=groq_api_key,
+            temperature=0.7
+        )
+    except Exception as e:
+        print(f"Error initializing LLM: {e}")
         return default_decision
 
     # Normalize position side for the LLM to be consistent with the prompt ('long'/'short')

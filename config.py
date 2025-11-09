@@ -5,8 +5,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Groq Ayarları
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME",)
+# Ortamdaki GROQ_API_KEY, GROQ_API_KEY1, GROQ_API_KEY2 vb. tüm anahtarları bulup bir listeye atar.
+GROQ_API_KEYS = [
+    key for key_name, key in os.environ.items() 
+    if key_name.startswith("GROQ_API_KEY") and key
+]
+if not GROQ_API_KEYS:
+    raise ValueError("UYARI: .env dosyasında 'GROQ_API_KEY' ile başlayan hiçbir API anahtarı bulunamadı!")
+print(f"Found {len(GROQ_API_KEYS)} Groq API keys.")
+
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME")
 
 # Binance Ayarları
 BINANCE_API_KEY = os.getenv("BINANCE_TESTNET_API_KEY")
@@ -17,7 +25,7 @@ symbols_from_env = os.getenv("TRADING_SYMBOLS", "BTC/USDT,ETH/USDT,DOGE/USDT,SOL
 TRADING_SYMBOLS = [symbol.strip() for symbol in symbols_from_env.split(',')]
 
 
-if not GROQ_API_KEY or not BINANCE_API_KEY:
+if not BINANCE_API_KEY:
     print("UYARI: API anahtarları .env dosyasında eksik!")
 
 # Simülasyon Ayarları

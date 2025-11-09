@@ -57,65 +57,250 @@ def check_tp_sl():
             print(f"[{symbol}] Error during TP/SL check: {e}")
 
 
+# --- State Management ---
+
+
+cycle_count = 0
+
+
+current_api_key_index = 0
+
+
+# --- End State Management ---
+
+
+
+
+
 def main_job():
+
+
     """
+
+
     Main job flow: Update PnL -> Check TP/SL -> For each symbol: Get Data -> Get Decision -> Execute
+
+
     """
+
+
+    global cycle_count, current_api_key_index
+
+
+
+
+
     print(f"\n{'='*60}")
-    print(f"--- Cycle Start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
-    print(f"{ '='*60}")
+
+
+    print(f"--- Cycle Start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Cycle #{cycle_count}) ---")
+
+
+    print(f"--- Using API Key Index: {current_api_key_index} ---")
+
+
+    print(f"{'='*60}")
+
+
     
+
+
     # 1. Update PnL for all open positions FIRST
+
+
     if config.SIMULATION_MODE and portfolio:
+
+
         print("\n[STEP 1] Updating open positions from market...")
+
+
         portfolio.update_open_positions()
+
+
         
+
+
         # Debug: Show what's in memory after update
+
+
         print(f"[DEBUG] Positions in memory: {list(portfolio.positions.keys())}")
+
+
         print(f"[DEBUG] Balance in memory: ${portfolio.balance:.2f}")
 
+
+
+
+
     # 2. Check for TP/SL on existing positions with the updated data
+
+
     if config.SIMULATION_MODE and portfolio:
+
+
         print("\n[STEP 2] Checking TP/SL triggers...")
+
+
         check_tp_sl()
 
+
+
+
+
     # 3. Get a fresh portfolio summary to be used by the AI
+
+
     portfolio_summary = {}
+
+
     if config.SIMULATION_MODE and portfolio:
+
+
         print("\n[STEP 3] Getting portfolio summary...")
+
+
         portfolio_summary = portfolio.get_portfolio_summary()
+
+
         print("[PF] Portfolio Summary:", json.dumps(portfolio_summary, indent=2))
 
+
+
+
+
     # 4. For each symbol, run the main trading logic
+
+
     print("\n[STEP 4] Processing trading symbols...")
+
+
     for symbol in config.TRADING_SYMBOLS:
+
+
         try:
+
+
             print(f"\n-> Processing {symbol}...")
+
+
             
+
+
             # a. Get market data and current position status
+
+
             market_summary = market.get_market_summary(symbol=symbol)
+
+
             if not market_summary:
+
+
                 print(f"[{symbol}] Could not get market summary, skipping.")
+
+
                 continue
+
+
             
+
+
             position_status = trade.get_current_position(symbol=symbol)
+
+
             
-            # b. Get trade decision from LLM
+
+
+            # b. Get trade decision from LLM using the currently active API key
+
+
+            active_api_key = config.GROQ_API_KEYS[current_api_key_index]
+
+
             print(f"[{symbol}] Data: {json.dumps(market_summary)}")
+
+
             print(f"[{symbol}] Current Position: {position_status[0]}")
-            decision = trader.get_trade_decision(market_summary, position_status, portfolio_summary)
+
+
+            decision = trader.get_trade_decision(
+
+
+                market_summary=market_summary, 
+
+
+                position_status=position_status, 
+
+
+                portfolio_summary=portfolio_summary,
+
+
+                groq_api_key=active_api_key
+
+
+            )
+
+
+
+
 
             # c. Execute the decision
+
+
             trade.parse_and_execute(decision, symbol)
+
+
             
+
+
         except Exception as e:
+
+
             print(f"[{symbol}] An unexpected error occurred in the main loop: {e}")
+
+
             import traceback
+
+
             traceback.print_exc()
+
+
     
+
+
+    # 5. Increment cycle count and rotate API key if necessary
+
+
+    cycle_count += 1
+
+
+    if cycle_count % 60 == 0:
+
+
+        previous_key_index = current_api_key_index
+
+
+        current_api_key_index = (current_api_key_index + 1) % len(config.GROQ_API_KEYS)
+
+
+        print(f"\n{'!'*20}")
+
+
+        print(f"ROTATING API KEY: Switched from index {previous_key_index} to {current_api_key_index}.")
+
+
+        print(f"{'!'*20}\n")
+
+
+
+
+
     print(f"\n{'='*60}")
+
+
     print(f"--- Cycle End: Next run in 1 minute ---")
-    print(f"{ '='*60}\n")
+
+
+    print(f"{'='*60}\n")
 
 
 print("--- LLM Scalping Bot Initialized ---")
