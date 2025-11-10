@@ -73,4 +73,3 @@ zstandard==0.25.0
 Flask
 gunicorn
 langchain-community
-honcho
