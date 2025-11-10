@@ -130,7 +130,8 @@ class SimulatedPortfolio:
             'quantity': quantity,
             'leverage': leverage,
             'margin': margin_used,
-            'unrealized_pnl': 0
+            'unrealized_pnl': 0,
+            'atr_at_entry': market_data.get('atr_14', 0) # Store ATR on entry
         }
         print(f"[SIM] POSITION OPENED: {symbol} {side.upper()} {quantity:.6f} @ {price}. Margin: {margin_used:.2f} USDT. New Balance: {self.balance:.2f} USDT")
         self._save_state()

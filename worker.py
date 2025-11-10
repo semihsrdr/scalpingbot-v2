@@ -20,7 +20,10 @@ if config.SIMULATION_MODE:
     print(f"[INIT] Portfolio initialized and shared with trade module.")
 
 def check_tp_sl():
-    """Checks open positions and closes them if TP/SL levels are hit."""
+    """
+    Checks open positions and closes them if TP (percentage-based) or
+    dynamic SL (ATR-based) levels are hit.
+    """
     if not config.SIMULATION_MODE:
         print("TP/SL check is currently only supported in simulation mode.")
         return
@@ -34,24 +37,46 @@ def check_tp_sl():
         try:
             margin = position.get('margin', 0)
             unrealized_pnl = position.get('unrealized_pnl', 0)
-            
-            if margin == 0: 
+            entry_price = position.get('entry_price', 0)
+            current_price = position.get('current_price', 0)
+            atr_at_entry = position.get('atr_at_entry', 0)
+            side = position.get('side')
+
+            if margin == 0 or entry_price == 0:
                 continue
 
-            # More accurate PnL % calculation based on margin used
+            # 1. Check for Take Profit (percentage-based)
             pnl_pct = (unrealized_pnl / margin) * 100
-            
-            print(f"[{symbol}] PnL: {pnl_pct:.2f}% (Entry: {position['entry_price']}, Current: {position['current_price']}, PnL: ${unrealized_pnl:.2f})")
-
-            # Check TP/SL
             if pnl_pct >= config.TAKE_PROFIT_PCT:
                 reason = f"TAKE PROFIT triggered at {pnl_pct:.2f}%"
                 print(f"✅ [{symbol}] {reason}")
                 trade.parse_and_execute({"command": "close", "reasoning": reason}, symbol)
-            elif pnl_pct <= -config.STOP_LOSS_PCT:
-                reason = f"STOP LOSS triggered at {pnl_pct:.2f}%"
-                print(f"❌ [{symbol}] {reason}")
-                trade.parse_and_execute({"command": "close", "reasoning": reason}, symbol)
+                continue # Move to next position
+
+            # 2. Check for Dynamic Stop Loss (ATR-based)
+            if atr_at_entry > 0:
+                stop_loss_price = 0
+                if side in ['long', 'buy']:
+                    stop_loss_price = entry_price - (atr_at_entry * config.ATR_MULTIPLIER)
+                    print(f"[{symbol}] PnL: {pnl_pct:.2f}% | Current: {current_price} | Dynamic SL Price: < {stop_loss_price:.4f}")
+                    if current_price <= stop_loss_price:
+                        reason = f"DYNAMIC STOP LOSS triggered at price {current_price:.4f} (ATR: {atr_at_entry}, Multiplier: {config.ATR_MULTIPLIER})"
+                        print(f"❌ [{symbol}] {reason}")
+                        trade.parse_and_execute({"command": "close", "reasoning": reason}, symbol)
+                elif side in ['short', 'sell']:
+                    stop_loss_price = entry_price + (atr_at_entry * config.ATR_MULTIPLIER)
+                    print(f"[{symbol}] PnL: {pnl_pct:.2f}% | Current: {current_price} | Dynamic SL Price: > {stop_loss_price:.4f}")
+                    if current_price >= stop_loss_price:
+                        reason = f"DYNAMIC STOP LOSS triggered at price {current_price:.4f} (ATR: {atr_at_entry}, Multiplier: {config.ATR_MULTIPLIER})"
+                        print(f"❌ [{symbol}] {reason}")
+                        trade.parse_and_execute({"command": "close", "reasoning": reason}, symbol)
+            else:
+                # Fallback to old percentage-based SL if ATR is not available
+                print(f"[{symbol}] PnL: {pnl_pct:.2f}% | Current: {current_price} | (Fallback SL: < {-config.STOP_LOSS_PCT}%)")
+                if pnl_pct <= -config.STOP_LOSS_PCT:
+                    reason = f"FALLBACK STOP LOSS triggered at {pnl_pct:.2f}%"
+                    print(f"❌ [{symbol}] {reason}")
+                    trade.parse_and_execute({"command": "close", "reasoning": reason}, symbol)
 
         except Exception as e:
             print(f"[{symbol}] Error during TP/SL check: {e}")

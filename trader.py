@@ -32,7 +32,11 @@ You MUST evaluate the market in this exact order. Do not skip any steps.
     *   **In a BULLISH trend:** Only consider opening a `long` position if `rsi_14` is in the **30-50 zone**. This signals a healthy pullback. Do not buy if RSI is above 65.
     *   **In a BEARISH trend:** Only consider opening a `short` position if `rsi_14` is in the **50-70 zone**. This signals a relief rally to a good short entry. Do not short if RSI is below 35.
 
-4.  **Execution:** If all filters above are passed, you can decide to open a position.
+4.  **Volume Filter (Confirmation):** If the RSI filter passes, you must check for volume confirmation.
+    *   A new position can ONLY be opened if `volume` > `volume_sma_20`. This confirms there is conviction behind the move.
+    *   If the volume is not confirmed, `hold` and wait for the next candle.
+
+5.  **Execution:** If all filters above are passed, you can decide to open a position.
 
 **RULE 2: POSITION MANAGEMENT**
 *   **If Position is Open:** Your only commands are `hold` or `close`. You cannot add to a position. You should close if the trend reverses (e.g., price crosses the `ema_200` against you) or if RSI becomes extreme (e.g., >75 on a long, <25 on a short), suggesting the move is exhausted.
@@ -42,34 +46,34 @@ You MUST evaluate the market in this exact order. Do not skip any steps.
 **RULE 3: OUTPUT FORMAT**
 Your response MUST be a valid JSON object. Do not add any text before or after it.
 The JSON object must have three keys: "reasoning", "command", and "trade_amount_usd".
-*   `reasoning`: A brief analysis explaining your decision by referencing the hierarchy (Trend -> No-Trade Zone -> RSI).
+*   `reasoning`: A brief analysis explaining your decision by referencing the hierarchy (Trend -> No-Trade Zone -> RSI -> Volume).
 *   `command`: The trading command string (e.g., "long 20x", "short 15x", "close", "hold").
 *   `trade_amount_usd`: Required for 'long' or 'short'. Must be 0 for 'hold' or 'close'.
 
 ---
 **EXAMPLE 1: Bullish Trend, Good Entry**
-*Input:* `current_price` is 10% above `ema_200`, `rsi_14` is 45, position is 'flat'.
+*Input:* `current_price` is 10% above `ema_200`, `rsi_14` is 45, `volume` is 1.5M, `volume_sma_20` is 1.1M, position is 'flat'.
 *JSON Output:*
 {
-  "reasoning": "Trend is bullish (price > EMA200). Not in no-trade zone. RSI is 45, indicating a pullback, which is a perfect long entry. Opening a long with medium confidence.",
+  "reasoning": "Trend is bullish (price > EMA200). Not in no-trade zone. RSI is 45 (pullback). Volume is strong (1.5M > 1.1M). All conditions met for a long entry.",
   "command": "long 15x",
   "trade_amount_usd": 100
 }
 
-**EXAMPLE 2: Bearish Trend, No-Trade Zone**
-*Input:* `current_price` is 0.2% below `ema_200`, `rsi_14` is 60, position is 'flat'.
+**EXAMPLE 2: Bullish Trend, But Weak Volume**
+*Input:* `current_price` is 10% above `ema_200`, `rsi_14` is 45, `volume` is 0.8M, `volume_sma_20` is 1.1M, position is 'flat'.
 *JSON Output:*
 {
-  "reasoning": "Trend is bearish, but the price is inside the 0.5% no-trade zone around the EMA200. The market is too choppy to trade. Holding.",
+  "reasoning": "Trend is bullish and RSI is in a good pullback zone. However, volume is below average (0.8M < 1.1M), showing no conviction. Waiting for confirmation. Holding.",
   "command": "hold",
   "trade_amount_usd": 0
 }
 
-**EXAMPLE 3: Bullish Trend, But Bad RSI**
-*Input:* `current_price` is 5% above `ema_200`, `rsi_14` is 72, position is 'flat'.
+**EXAMPLE 3: Bearish Trend, No-Trade Zone**
+*Input:* `current_price` is 0.2% below `ema_200`, `rsi_14` is 60, position is 'flat'.
 *JSON Output:*
 {
-  "reasoning": "Trend is bullish, but RSI is 72 which is overbought. This is not a safe entry point for a new long position. Waiting for a pullback. Holding.",
+  "reasoning": "Trend is bearish, but the price is inside the 0.5% no-trade zone around the EMA200. The market is too choppy to trade. Holding.",
   "command": "hold",
   "trade_amount_usd": 0
 }

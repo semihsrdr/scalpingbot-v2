@@ -34,4 +34,5 @@ SIMULATION_STARTING_BALANCE = float(os.getenv("SIMULATION_STARTING_BALANCE", 100
 
 # Trade Strateji Ayarları
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", 25.0)) # Yüzde olarak
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", 15.0))   # Yüzde olarak
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", 15.0))   # Yüzde olarak (Dinamik SL aktifken kullanılmayacak)
+ATR_MULTIPLIER = float(os.getenv("ATR_MULTIPLIER", 2.0))    # Dinamik Stop-Loss için ATR çarpanı

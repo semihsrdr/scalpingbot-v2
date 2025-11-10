@@ -4,14 +4,14 @@ import pandas_ta as ta
 from exchange import get_client
 import json
 
-def get_market_summary(symbol=config.TRADING_SYMBOLS[0], interval='1m', limit=250):
+def get_market_summary(symbol=config.TRADING_SYMBOLS[0], interval='3m', limit=250):
     """
-    Fetches recent candles, calculates EMA20, EMA50, EMA200, RSI and returns a JSON summary for the LLM.
-    The EMA200 is used as the primary long-term trend filter.
+    Fetches recent candles, calculates key indicators including EMA, RSI, ATR, and Volume SMA,
+    and returns a JSON summary for the LLM.
     """
     try:
         client = get_client()
-        # 1. Fetch recent candles (250 to have enough data for EMA 200)
+        # 1. Fetch recent candles
         ohlcv = client.fetch_ohlcv(symbol, timeframe=interval, limit=limit)
         
         # 2. Convert to Pandas DataFrame
@@ -25,8 +25,10 @@ def get_market_summary(symbol=config.TRADING_SYMBOLS[0], interval='1m', limit=25
         # 3. Calculate Indicators (using pandas-ta)
         df.ta.ema(length=20, append=True)
         df.ta.ema(length=50, append=True)
-        df.ta.ema(length=200, append=True) # Added long-term trend filter
+        df.ta.ema(length=200, append=True)
         df.ta.rsi(length=14, append=True)
+        df.ta.atr(length=14, append=True) # For dynamic stop-loss
+        df.ta.sma(close=df['volume'], length=20, append=True) # For volume confirmation
         
         # 4. Select the last candle (most recent data)
         last_candle = df.iloc[-1]
@@ -37,8 +39,6 @@ def get_market_summary(symbol=config.TRADING_SYMBOLS[0], interval='1m', limit=25
 
         # 5. Create summary JSON for the LLM
         ema_200_value = round(last_candle['EMA_200'], 2)
-        
-        # Determine trend based on price vs EMA200
         trend = "bullish" if current_price > ema_200_value else "bearish"
 
         summary = {
@@ -46,9 +46,12 @@ def get_market_summary(symbol=config.TRADING_SYMBOLS[0], interval='1m', limit=25
             "current_price": current_price,
             "ema_20": round(last_candle['EMA_20'], 2),
             "ema_50": round(last_candle['EMA_50'], 2),
-            "ema_200": ema_200_value, # Added for long-term context
+            "ema_200": ema_200_value,
             "rsi_14": round(last_candle['RSI_14'], 2),
-            "market_trend": trend # Trend is now based on EMA200
+            "atr_14": round(last_candle['ATRr_14'], 4), # ATR value
+            "volume": round(last_candle['volume'], 2),
+            "volume_sma_20": round(last_candle['SMA_volume_20'], 2), # Volume SMA
+            "market_trend": trend
         }
         
         return summary
