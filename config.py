@@ -33,5 +33,5 @@ SIMULATION_MODE = os.getenv("SIMULATION_MODE", "True").lower() in ('true', '1', 
 SIMULATION_STARTING_BALANCE = float(os.getenv("SIMULATION_STARTING_BALANCE", 1000.0))
 
 # Trade Strateji Ayarları
-TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", 35.0)) # Yüzde olarak
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", 20.0))   # Yüzde olarak
+TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", 25.0)) # Yüzde olarak
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", 15.0))   # Yüzde olarak

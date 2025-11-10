@@ -55,7 +55,7 @@ def parse_and_execute(decision: dict, symbol: str):
     match = re.search(r'(\d+)x', command)
     if match:
         leverage = int(match.group(1))
-        leverage = max(1, min(50, leverage))
+        leverage = max(5, min(25, leverage))
 
     action = command.split()[0]
     
