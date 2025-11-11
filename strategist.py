@@ -10,17 +10,18 @@ from market import get_broad_market_analysis # Gerçek analiz fonksiyonunu impor
 STRATEGY_FILE = "strategy.json"
 TRADE_LOG_FILE = "trading_log.txt"
 
-# --- SAFETY GUARDRAILS ---
+# --- SAFETY GUARDRAILS (Loosened for Simulation) ---
 # Define safe operational limits for the parameters that the LLM can set.
+# These have been widened to allow for more experimentation in simulation mode.
 VALIDATION_LIMITS = {
-    "default_leverage": (5, 25),
-    "trade_amount_pct_of_balance": (5, 20),
-    "rsi_long_entry_min": (10, 40),
-    "rsi_long_entry_max": (45, 65),
-    "rsi_exit_extreme_long": (70, 90),
-    "rsi_short_entry_min": (50, 70),
-    "rsi_short_entry_max": (75, 95),
-    "rsi_exit_extreme_short": (10, 30),
+    "default_leverage": (1, 75),
+    "trade_amount_pct_of_balance": (1, 50),
+    "rsi_long_entry_min": (5, 45),
+    "rsi_long_entry_max": (50, 70),
+    "rsi_exit_extreme_long": (65, 95),
+    "rsi_short_entry_min": (30, 50), # Loosened to allow values like 45
+    "rsi_short_entry_max": (55, 95),
+    "rsi_exit_extreme_short": (5, 35),
 }
 
 SYSTEM_PROMPT = """
@@ -41,8 +42,10 @@ Subtly adjust the parameters in `strategy.json` to improve profitability and red
     -   *Example 3:* "The bot is performing well. No changes are needed at this time."
 4.  **Propose Changes:** Modify the JSON parameters based on your hypothesis.
 
-**OUTPUT RULES:**
--   Your response MUST be a valid JSON object, and nothing else.
+**CRITICAL OUTPUT RULES:**
+-   Your response MUST be a raw, valid JSON object and NOTHING ELSE.
+-   DO NOT include ```json``` markers, explanations, or any text before or after the JSON object.
+-   Your entire response must start with `{` and end with `}`.
 -   The JSON must be the *complete, updated* content for the `strategy.json` file.
 -   If you decide no changes are necessary, you MUST return the original `current_strategy` JSON that you were given.
 -   Add a `comment` field at the top of the JSON to explain your reasoning for the change in one sentence.
