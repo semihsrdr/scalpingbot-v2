@@ -40,15 +40,15 @@ def get_current_position(symbol: str):
         print(f"Could not get position info for {symbol}: {e}")
     return "error", 0
 
-def parse_and_execute(decision: dict, symbol: str):
+def parse_and_execute(decision: dict, symbol: str, market_data: dict, position_status: tuple):
     """
-    Parses the decision dictionary from LLM and executes the trade.
-    Logs the action.
+    Parses the decision dictionary from the engine and executes the trade.
+    Accepts market_data and position_status to avoid redundant API calls.
     """
     command = decision.get("command", "hold")
     reasoning = decision.get("reasoning", "No reasoning provided.")
     trade_amount_usd = decision.get("trade_amount_usd", 0)
-    print(f"[{symbol}] Command received: '{command}' with amount ${trade_amount_usd}")
+    print(f"[{symbol}] Command received: '{command}' with amount ${trade_amount_usd:.2f}")
 
     # Parse leverage from command string
     leverage = 20 # Default
@@ -59,9 +59,9 @@ def parse_and_execute(decision: dict, symbol: str):
 
     action = command.split()[0]
     
-    # Check current position
-    position_type, position_amount = get_current_position(symbol)
-    print(f"[{symbol}] Current position: {position_type} ({position_amount})")
+    # Use the position status passed from the worker
+    position_type, position_amount = position_status
+    print(f"[{symbol}] Current position (from cache): {position_type} ({position_amount})")
 
     # Determine the executor (simulation or real client)
     if config.SIMULATION_MODE:
@@ -73,10 +73,9 @@ def parse_and_execute(decision: dict, symbol: str):
         executor = get_client()
 
     try:
-        # Always get fresh market data for logging and execution
-        market_data = get_market_summary(symbol)
+        # Use the market data passed from the worker
         if not market_data:
-            print(f"[{symbol}] Could not get market summary. Aborting.")
+            print(f"[{symbol}] Market data is missing. Aborting.")
             return
         current_price = market_data.get('current_price')
 

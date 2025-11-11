@@ -1,7 +1,7 @@
 import schedule
 import time
 import market
-import trader
+import engine # trader'ı engine ile değiştiriyoruz
 import config
 import json
 from datetime import datetime
@@ -87,75 +87,106 @@ def check_tp_sl():
 cycle_count = 0
 consecutive_error_cycles = 0
 last_cycle_errors = []
+strategy_rules = {}
 # --- End State Management ---
+
+def load_strategy():
+    """Loads strategy rules from strategy.json."""
+    global strategy_rules
+    try:
+        with open('strategy.json', 'r') as f:
+            strategy_rules = json.load(f)
+        print("[INIT] Strategy rules loaded from strategy.json")
+    except Exception as e:
+        print(f"[CRITICAL] Could not load strategy.json: {e}. Bot will not run.")
+        strategy_rules = {} # Reset to prevent running with old/bad config
 
 def main_job():
     """
-    Main job flow: Update PnL -> Check TP/SL -> For each symbol: Get Data -> Get Decision -> Execute
-    Also handles error counting and periodic email reporting.
+    Main job flow: Fetch all data once -> Update PnL -> Check TP/SL -> For each symbol: Decide -> Execute.
+    This new structure uses a "Cycle Cache" to prevent redundant API calls.
     """
     global cycle_count, consecutive_error_cycles, last_cycle_errors
     cycle_count += 1
     
-    # Reset errors for the new cycle
+    # Reload strategy every cycle to catch updates made by the strategist
+    load_strategy()
+    if not strategy_rules:
+        print("[WORKER] Halting cycle because strategy rules are not loaded.")
+        return
+
     cycle_errors = []
     is_cycle_successful = False
 
     print(f"\n{'='*60}")
     print(f"--- Cycle Start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Cycle #{cycle_count}) ---")
-    print(f"--- Consecutive Error Cycles: {consecutive_error_cycles} ---")
+    print(f"--- Strategy: {strategy_rules.get('strategy_name', 'N/A')} ---")
     print(f"{'='*60}")
+
+    # --- "CYCLE CACHE" DATA FETCH ---
+    # 1. Fetch market data for all symbols ONCE at the beginning of the cycle.
+    print("\n[STEP 1] Fetching market data for all symbols...")
+    market_data_cache = {}
+    for symbol in config.TRADING_SYMBOLS:
+        summary = market.get_market_summary(symbol=symbol, interval='3m')
+        if summary:
+            market_data_cache[symbol] = summary
+        else:
+            error_msg = f"[{symbol}] Could not get market summary, it will be skipped this cycle."
+            print(error_msg)
+            cycle_errors.append(error_msg)
     
-    # 1. Update PnL for all open positions FIRST
+    if not market_data_cache:
+        print("[WORKER] Could not fetch market data for ANY symbol. Skipping cycle.")
+        consecutive_error_cycles += 1
+        last_cycle_errors = cycle_errors
+        return # Exit early if no data is available at all
+    
+    # 2. Update PnL for all open positions using the cached data
     if config.SIMULATION_MODE and portfolio:
-        print("\n[STEP 1] Updating open positions from market...")
-        portfolio.update_open_positions()
+        print("\n[STEP 2] Updating open positions from cached market data...")
+        portfolio.update_open_positions(market_data_cache)
         
-        # Debug: Show what's in memory after update
-        print(f"[DEBUG] Positions in memory: {list(portfolio.positions.keys())}")
-        print(f"[DEBUG] Balance in memory: ${portfolio.balance:.2f}")
-
-    # 2. Check for TP/SL on existing positions with the updated data
+    # 3. Check for TP/SL on existing positions
     if config.SIMULATION_MODE and portfolio:
-        print("\n[STEP 2] Checking TP/SL triggers...")
-        check_tp_sl()
+        print("\n[STEP 3] Checking TP/SL triggers...")
+        check_tp_sl() # This function internally uses the updated portfolio state
 
-    # 3. Get a fresh portfolio summary to be used by the AI and periodic emails
+    # 4. Get a fresh portfolio summary
     portfolio_summary = {}
     if config.SIMULATION_MODE and portfolio:
-        print("\n[STEP 3] Getting portfolio summary...")
+        print("\n[STEP 4] Getting portfolio summary...")
         portfolio_summary = portfolio.get_portfolio_summary()
         print("[PF] Portfolio Summary:", json.dumps(portfolio_summary, indent=2))
 
-    # 4. For each symbol, run the main trading logic
-    print("\n[STEP 4] Processing trading symbols...")
+    # 5. For each symbol, run the main trading logic using cached data
+    print("\n[STEP 5] Processing trading symbols with RULE-BASED ENGINE...")
     for symbol in config.TRADING_SYMBOLS:
         try:
+            market_summary = market_data_cache.get(symbol)
+            if not market_summary:
+                # Already logged the error during fetch, just skip
+                continue
+
             print(f"\n-> Processing {symbol}...")
             
-            # a. Get market data and current position status
-            market_summary = market.get_market_summary(symbol=symbol, interval='3m')
-            if not market_summary:
-                error_msg = f"[{symbol}] Could not get market summary, skipping."
-                print(error_msg)
-                cycle_errors.append(error_msg)
-                continue
-            
+            # a. Get current position status
             position_status = trade.get_current_position(symbol=symbol)
             
-            # b. Get trade decision from LLM
-            print(f"[{symbol}] Data: {json.dumps(market_summary)}")
+            # b. Get trade decision from the RULE-BASED ENGINE
+            print(f"[{symbol}] Data (from cache): {json.dumps(market_summary)}")
             print(f"[{symbol}] Current Position: {position_status[0]}")
-            decision = trader.get_trade_decision(
-                market_summary=market_summary, 
+            decision = engine.decide_action(
+                strategy=strategy_rules,
+                market_data=market_summary, 
                 position_status=position_status, 
                 portfolio_summary=portfolio_summary
             )
+            print(f"[{symbol}] Engine Decision: '{decision.get('command')}' | Reason: {decision.get('reasoning')}")
 
-            # c. Execute the decision
-            trade.parse_and_execute(decision, symbol)
+            # c. Execute the decision, passing the cached data
+            trade.parse_and_execute(decision, symbol, market_summary, position_status)
             
-            # If we get here, at least one symbol was processed successfully
             is_cycle_successful = True
             
         except Exception as e:
@@ -165,9 +196,9 @@ def main_job():
             traceback.print_exc()
             cycle_errors.append(error_msg)
     
-    # 5. Save state to file for web UI
+    # 6. Save state to file for web UI
     if config.SIMULATION_MODE and portfolio:
-        print("\n[STEP 5] Saving state to portfolio_state.json for web UI...")
+        print("\n[STEP 6] Saving state to portfolio_state.json for web UI...")
         try:
             state_data = {
                 "portfolio_summary": portfolio.get_portfolio_summary(),
@@ -179,11 +210,11 @@ def main_job():
         except Exception as e:
             print(f"Error saving state to file: {e}")
 
-    # 6. Handle Error and Summary Email Logic
+    # 7. Handle Error and Summary Email Logic
     if not is_cycle_successful and len(config.TRADING_SYMBOLS) > 0:
         consecutive_error_cycles += 1
         print(f"\n[WORKER] Cycle failed for all symbols. Consecutive error count: {consecutive_error_cycles}")
-        last_cycle_errors = cycle_errors # Store the errors from the last failed cycle
+        last_cycle_errors = cycle_errors
     else:
         if consecutive_error_cycles > 0:
             print(f"\n[WORKER] Cycle succeeded. Resetting consecutive error count from {consecutive_error_cycles} to 0.")
@@ -194,22 +225,27 @@ def main_job():
         mailer.send_error_email(last_cycle_errors)
         consecutive_error_cycles = 0 # Reset after sending to avoid spam
 
-    if cycle_count > 0 and cycle_count % 60 == 0:
+    # Send summary email every 30 cycles
+    if cycle_count > 0 and cycle_count % 30 == 0:
         print(f"\n[WORKER] Reached cycle {cycle_count}. Sending periodic summary email...")
-        mailer.send_summary_email(portfolio_summary)
+        open_positions = portfolio.get_all_open_positions() if portfolio else {}
+        mailer.send_summary_email(portfolio_summary, open_positions)
 
     print(f"\n{'='*60}")
     print(f"--- Cycle End: Next run in 1 minute ---")
     print(f"{'='*60}\n")
 
 
-print("--- LLM Scalping Bot Initialized ---")
+print("--- RULE-BASED Scalping Bot Initialized ---")
 print(f"Trading Assets: {', '.join(config.TRADING_SYMBOLS)}")
-print(f"LLM Model: {config.LLM_MODEL_NAME}")
+print(f"Engine: Running based on rules from 'strategy.json'")
 print(f"Strategy: TP: {config.TAKE_PROFIT_PCT}% / SL: {config.STOP_LOSS_PCT}%")
 print(f"Simulation Mode: {'Active' if config.SIMULATION_MODE else 'Inactive'}")
 print(f"Run Interval: Every 1 minute (analyzing 3m candles)")
 print("------------------------------------")
+
+# Load strategy rules at startup
+load_strategy()
 
 print("\n[WORKER] Starting trading bot worker...")
 
@@ -217,7 +253,11 @@ print("\n[WORKER] Starting trading bot worker...")
 schedule.every(1).minutes.do(main_job)
 
 # Run the job once immediately to start
-main_job()
+if strategy_rules:
+    main_job()
+else:
+    print("[WORKER] Bot not started due to missing strategy rules.")
+
 
 # Main loop for the scheduler
 print("\n[SCHEDULER] Worker is now running. Press Ctrl+C to stop.\n")

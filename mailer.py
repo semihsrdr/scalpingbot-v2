@@ -51,18 +51,40 @@ def send_error_email(errors):
     
     send_email(subject, body)
 
-def send_summary_email(portfolio_summary):
+def send_summary_email(portfolio_summary, open_positions):
     """
-    Formats and sends a periodic summary email.
+    Formats and sends a periodic summary email with detailed position info.
     """
     subject = f"Trading Bot Periodic Summary - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     
+    # --- Build The Email Body ---
     body = "This is a scheduled summary of the trading bot's performance.\n\n"
+    
+    # 1. Portfolio Summary Section
     body += "--- Portfolio Summary ---\n"
     body += f"Total Equity: ${portfolio_summary.get('total_equity_usd', 0):.2f}\n"
     body += f"Available Balance: ${portfolio_summary.get('available_balance_usd', 0):.2f}\n"
     body += f"Unrealized PnL: ${portfolio_summary.get('unrealized_pnl_usd', 0):.2f}\n"
-    body += f"Open Positions: {portfolio_summary.get('open_positions_count', 0)}\n"
+    body += f"Open Positions Count: {portfolio_summary.get('open_positions_count', 0)}\n\n"
+
+    # 2. Open Positions Section
+    body += "--- Open Positions ---\n"
+    if not open_positions:
+        body += "No open positions at the moment.\n"
+    else:
+        for symbol, pos in open_positions.items():
+            pnl = pos.get('unrealized_pnl', 0)
+            pnl_pct = (pnl / pos['margin']) * 100 if pos.get('margin', 0) > 0 else 0
+            
+            body += f"Symbol: {symbol}\n"
+            body += f"  Side: {pos.get('side', 'N/A').upper()}\n"
+            body += f"  Quantity: {pos.get('quantity', 0):.6f}\n"
+            body += f"  Leverage: {pos.get('leverage', 0)}x\n"
+            body += f"  Entry Price: ${pos.get('entry_price', 0):.4f}\n"
+            body += f"  Current Price: ${pos.get('current_price', 0):.4f}\n"
+            body += f"  Unrealized PnL: ${pnl:.4f} ({pnl_pct:.2f}%)\n"
+            body += "---\n"
+
     body += "\nBot continues to operate normally."
 
     send_email(subject, body)

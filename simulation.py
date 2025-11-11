@@ -195,36 +195,34 @@ class SimulatedPortfolio:
             
         return price_diff * position['quantity']
 
-    def update_open_positions(self):
+    def update_open_positions(self, market_data_cache: dict):
         """ 
-        Iterates through open positions, updates current price and unrealized PnL.
+        Iterates through open positions, updates current price and unrealized PnL
+        using a pre-fetched cache of market data.
         """
         if not self.positions:
             # Still save state to record equity history even if no positions are open
             self._save_state()
             return
         
-        print("[SIM] Updating PnL for open positions...")
+        print("[SIM] Updating PnL for open positions using cached data...")
         symbols_to_update = list(self.positions.keys())
         updated_count = 0
         
         for symbol in symbols_to_update:
-            try:
-                market_data = get_market_summary(symbol)
+            position = self.positions[symbol]
+            market_data = market_data_cache.get(symbol)
+
+            if market_data and market_data.get('current_price'):
                 current_price = market_data.get('current_price')
-                
-                if current_price:
-                    position = self.positions[symbol]
-                    old_price = position.get('current_price', 'N/A')
-                    position['current_price'] = current_price
-                    position['unrealized_pnl'] = self._calculate_pnl(symbol, current_price)
-                    updated_count += 1
-                    print(f"[SIM] Updated {symbol}: Old Price: {old_price}, New Price: {current_price}, Unrealized PnL: {position['unrealized_pnl']:.4f}")
-                else:
-                    print(f"[SIM] Warning: No price data for {symbol}")
-                    
-            except Exception as e:
-                print(f"[SIM] Could not update PnL for {symbol}: {e}")
+                old_price = position.get('current_price', 'N/A')
+                position['current_price'] = current_price
+                position['unrealized_pnl'] = self._calculate_pnl(symbol, current_price)
+                updated_count += 1
+                # This log can be very noisy, let's comment it out for now.
+                # print(f"[SIM] Updated {symbol}: Old Price: {old_price}, New Price: {current_price}, Unrealized PnL: {position['unrealized_pnl']:.4f}")
+            else:
+                print(f"[SIM] Warning: No market data for {symbol} in cache during PnL update.")
         
         # Save state regardless of whether positions were updated, to capture equity history
         self._save_state()

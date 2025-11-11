@@ -118,6 +118,10 @@ def get_trade_decision(market_summary: dict, position_status: tuple, portfolio_s
         response = llm.invoke(messages)
         response_text = response.content.strip()
 
+        # LLM sometimes wraps the JSON in markdown, so we strip it.
+        if '```json' in response_text:
+            response_text = response_text.split('```json')[1].split('```')[0].strip()
+
         # Parse the JSON output
         try:
             decision_json = json.loads(response_text)
